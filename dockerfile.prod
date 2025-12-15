@@ -1,0 +1,45 @@
+#DEPENDENCIAS
+FROM node:22-alpine3.19 as deps
+
+WORKDIR /usr/src/app
+
+COPY package*.json ./
+
+RUN npm install
+
+#BUILDER
+FROM node:22-alpine3.19 as build
+
+WORKDIR /usr/src/app
+
+#Copiar de deps las dependencias
+COPY --from=deps /usr/src/app/node_modules ./node_modules
+
+#Copiar codigo fuente
+COPY . .
+
+RUN npm run build
+
+#Limpiar para reducir espacio
+RUN npm ci -f --only=production && npm cache clean --force
+
+RUN npx prisma generate
+
+
+#IMAGEN FINAL
+FROM node:22-alpine3.19 as prod
+
+WORKDIR /usr/src/app
+
+COPY --from=build /usr/src/app/node_modules ./node_modules
+
+#Copiar codigo de prod
+COPY --from=build /usr/src/app/dist ./dist
+
+ENV NODE_ENV=production
+
+USER node
+
+EXPOSE 3000
+
+CMD [ "node", "dist/main.js" ]
